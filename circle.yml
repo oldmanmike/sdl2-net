@@ -1,8 +1,6 @@
 machine:
   ghc:
     version: 7.10.1
-  environment:
-    LD_LIBRARY_PATH: /usr/local/lib
 
 dependencies:
   cache_directories:
@@ -11,10 +9,11 @@ dependencies:
     - wget -q -O- https://s3.amazonaws.com/download.fpcomplete.com/ubuntu/fpco.key | sudo apt-key add -
     - echo 'deb http://download.fpcomplete.com/ubuntu/precise stable main' | sudo tee /etc/apt/sources.list.d/fpco.list
     - sudo apt-get update && sudo apt-get install stack -y
+    - sudo mkdir -p /usr/include/SDL2
     - wget http://www.libsdl.org/release/SDL2-2.0.3.tar.gz -O - | tar xz
-    - cd SDL2-2.0.3 && ./configure && make -j && sudo make install && cd ..
+    - cd SDL2-2.0.3 && ./configure && make -j && sudo make install && sudo cp -R include/* /usr/include/SDL2/ && cd ..
     - wget http://www.libsdl.org/projects/SDL_net/release/SDL2_net-2.0.0.tar.gz -O - | tar xz
-    - cd SDL2_net-2.0.0 && ./configure && make && sudo make install && cd ..
+    - cd SDL2_net-2.0.0 && ./configure && make && sudo make install && sudo cp SDL_net.h /usr/include/SDL2/ && cd ..
   override:
     - stack setup
     - stack build
