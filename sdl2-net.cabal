@@ -9,14 +9,17 @@ license-file:           LICENSE
 author:                 Michael Carpenter
 maintainer:             Michael Carpenter <oldmanmike.dev@gmail.com>
 copyright:              Copyright (C) 2015 Michael Carpenter
-category:               Game
+category:               Foreign binding, Game
 build-type:             Simple
 extra-source-files:     LICENSE, README.md
 cabal-version:          >=1.10
 
 library
   hs-source-dirs:       src
-  exposed-modules:      SDL.Raw.Net
+  exposed-modules:      SDL.Net
+                        SDL.Raw.Net
+                        SDL.Raw.Net.Enum
+                        SDL.Raw.Net.Types
   extra-libraries:      SDL2, SDL_net
   pkgconfig-depends:    sdl2 >= 2.0.3, SDL_net
   build-depends:        base >= 4.7 && < 5,

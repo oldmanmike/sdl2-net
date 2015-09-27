@@ -10,6 +10,6 @@ main = hspec $ do
   describe "SDL.Raw.Net.init" $ do
     it "Initialize the network API" $ do
       SDL.init `shouldReturn` (0 :: CInt)
-
-    it "Shutdown and cleanup the network API." $ do
+  describe "SDL.Raw.Net.quit" $ do
+    it "Shutdown and cleanup the network API" $ do
       SDL.quit `shouldReturn` ()

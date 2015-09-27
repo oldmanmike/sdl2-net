@@ -3,14 +3,63 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE ForeignFunctionInterface #-}
 #include "SDL2/SDL_net.h"
-module SDL.Raw.Net 
+module SDL.Raw.Net
+-- General
 ( init
 , quit
 , write16
+, write32
+, read16
+, read32
+
+-- Name Resolution
+, resolveHost
+, resolveIP
+
+-- TCP Sockets
+, tcpOpen
+, tcpClose
+, tcpAccept
+, tcpGetPeerAddress
+, tcpSend
+, tcpRecv
+
+-- UDP Sockets
+, udpOpen
+, udpClose
+, udpBind
+, udpUnbind
+, getPeerAddress
+, udpSend
+, udpRecv
+, udpSendV
+, udpRecvV
+
+-- UDP Packets
+, allocPacket
+, resizePacket
+, freePacket
+, allocPacketV
+, freePacketV
+
+-- Socket Sets
+, allocSocketSet
+, freeSocketSet
+--, addSocket
+, tcpAddSocket
+, udpAddSocket
+--, delSocket
+, tcpDelSocket
+, udpDelSocket
+, checkSockets
+--, socketReady
+
+, module SDL.Raw.Net.Enum
+, module SDL.Raw.Net.Types
 ) where
 
 import Control.Monad.IO.Class
-import GHC.Word
+import Data.Word
 import Foreign.C
 import Foreign.C.Types
 import Foreign.Ptr
@@ -18,93 +67,10 @@ import Foreign.Storable
 import Prelude hiding (init)
 import SDL.Raw hiding (init,quit)
 
--- | 1
--- SDL_net library major number at compilation time
-pattern SDL_NET_MAJOR_VERSION = (#const SDL_NET_MAJOR_VERSION)
--- | 2
--- SDL_net library minor number at compilation time
-pattern SDL_NET_MINOR_VERSION = (#const SDL_NET_MINOR_VERSION)
--- | 7
--- SDL_net library patch level at compilation time
-pattern SDL_NET_PATCHLEVEL = (#const SDL_NET_PATCHLEVEL)
+-- Internal Imports
+import SDL.Raw.Net.Enum
+import SDL.Raw.Net.Types
 
--- | 0x00000000 (0.0.0.0)
--- used for listening on all network interfaces
-pattern INADDR_ANY = (#const INADDR_ANY)
-
--- | 0xFFFFFFFF (255.255.255.255)
--- which has limited applications
-pattern INADDR_NONE = (#const INADDR_NONE)
-
--- | 0xFFFFFFFF (255.255.255.255)
--- used as destination when sending a message to all clients on a subnet that allows broadcasts
-pattern INADDR_BROADCAST = (#const INADDR_BROADCAST)
-
--- | 32
--- The maximum number of channels on a UDP socket
-pattern SDLNET_MAX_UDPCHANNELS = (#const SDLNET_MAX_UDPCHANNELS)
-
--- | 4
--- The maximum number of addresses bound to a single UDP socket channel
-pattern SDLNET_MAX_UDPADDRESSES = (#const SDLNET_MAX_UDPADDRESSES)
-
-data IPAddress = IPAddress
-  { host    :: Word32
-  , port    :: Word16
-  } deriving (Show,Eq)
-
-instance Storable IPAddress where
-  sizeOf _ = (#size IPaddress)
-  alignment = sizeOf
-  peek ptr = do
-    h <- (#peek IPaddress, host) ptr
-    p <- (#peek IPaddress, port) ptr
-    return $! IPAddress h p
-  poke ptr (IPAddress h p) = do
-    (#poke IPaddress, host) ptr h
-    (#poke IPaddress, port) ptr p
-
-data TCPSocketTarget
-type TCPSocket = Ptr TCPSocketTarget
-
-data UDPSocketTarget
-type UDPSocket = Ptr UDPSocketTarget
-
-data GenericSocket = GenericSocket { ready :: !CInt } deriving (Show,Eq)
-
-data UDPPacket = UDPPacket
-  { channel     :: !CInt
-  , payload     :: Ptr Word8
-  , len         :: !CInt
-  , maxlen      :: !CInt
-  , status      :: !CInt
-  , address     :: !IPAddress
-  } deriving (Show,Eq)
-
-instance Storable UDPPacket where
-  sizeOf _ = (#size UDPpacket)
-  alignment = sizeOf
-  peek ptr = do
-    c <- (#peek UDPpacket, channel) ptr
-    d <- (#peek UDPpacket, data) ptr
-    l <- (#peek UDPpacket, len) ptr
-    m <- (#peek UDPpacket, maxlen) ptr
-    s <- (#peek UDPpacket, status) ptr
-    a <- (#peek UDPpacket, address) ptr
-    return $! UDPPacket c d l m s a
-  poke ptr (UDPPacket c d l m s a) = do
-    (#poke UDPpacket, channel) ptr c
-    (#poke UDPpacket, data) ptr d
-    (#poke UDPpacket, len) ptr l
-    (#poke UDPpacket, maxlen) ptr m
-    (#poke UDPpacket, status) ptr s
-    (#poke UDPpacket, address) ptr a
-
-data SocketSet
-data GenericSet
--------------------------------------------------------------------------------
--- General
--------------------------------------------------------------------------------
 foreign import ccall unsafe "SDLNet_Init" initFFI :: IO CInt
 foreign import ccall unsafe "SDLNet_Quit" quitFFI :: IO ()
 foreign import ccall unsafe "SDLNet_Write16" write16FFI :: Word16 -> Ptr () -> IO ()
@@ -131,18 +97,18 @@ foreign import ccall unsafe "SDLNet_UDP_RecvV" udpRecvVFFI :: UDPSocket -> Ptr U
 foreign import ccall unsafe "SDLNet_AllocPacket" allocPacketFFI :: CInt -> IO (Ptr UDPPacket)
 foreign import ccall unsafe "SDLNet_ResizePacket" resizePacketFFI :: Ptr UDPPacket -> CInt -> IO CInt
 foreign import ccall unsafe "SDLNet_FreePacket" freePacketFFI :: Ptr UDPPacket -> IO ()
-foreign import ccall unsafe "SDLNet_AllocPacketV" allocPacketVFFI :: CInt -> CInt -> IO UDPPacket
+foreign import ccall unsafe "SDLNet_AllocPacketV" allocPacketVFFI :: CInt -> CInt -> IO (Ptr UDPPacket)
 foreign import ccall unsafe "SDLNet_FreePacketV" freePacketVFFI :: Ptr UDPPacket -> IO ()
 foreign import ccall unsafe "SDLNet_AllocSocketSet" allocSocketSetFFI :: CInt -> IO SocketSet
 foreign import ccall unsafe "SDLNet_FreeSocketSet" freeSocketSetFFI :: SocketSet -> IO ()
-foreign import ccall unsafe "SDLNet_AddSocket" addSocketFFI :: SocketSet -> GenericSocket -> IO CInt
+--foreign import ccall unsafe "SDLNet_AddSocket" addSocketFFI :: SocketSet -> GenericSocket -> IO CInt
 foreign import ccall unsafe "SDLNet_TCP_AddSocket" tcpAddSocketFFI :: SocketSet -> TCPSocket -> IO CInt
 foreign import ccall unsafe "SDLNet_UDP_AddSocket" udpAddSocketFFI :: SocketSet -> UDPSocket -> IO CInt
-foreign import ccall unsafe "SDLNet_DelSocket" delSocketFFI :: SocketSet -> GenericSet -> IO CInt
+--foreign import ccall unsafe "SDLNet_DelSocket" delSocketFFI :: SocketSet -> GenericSet -> IO CInt
 foreign import ccall unsafe "SDLNet_TCP_DelSocket" tcpDelSocketFFI :: SocketSet -> TCPSocket -> IO CInt
 foreign import ccall unsafe "SDLNet_UDP_DelSocket" udpDelSocketFFI :: SocketSet -> UDPSocket -> IO CInt
 foreign import ccall unsafe "SDLNet_CheckSockets" checkSocketsFFI :: SocketSet -> Word32 -> IO CInt
-foreign import ccall unsafe "SDLNet_SocketReady" socketReadyFFI :: GenericSocket -> IO CInt
+--foreign import ccall unsafe "SDLNet_SocketReady" socketReadyFFI :: GenericSocket -> IO CInt
 
 
 -- | Initialize the network API.
@@ -290,7 +256,7 @@ freePacket v1 = liftIO $ freePacketFFI v1
 {-# INLINE freePacket #-}
 
 
-allocPacketV :: MonadIO m => CInt -> CInt -> m UDPPacket
+allocPacketV :: MonadIO m => CInt -> CInt -> m (Ptr UDPPacket)
 allocPacketV v1 v2 = liftIO $ allocPacketVFFI v1 v2
 {-# INLINE allocPacketV #-}
 
@@ -309,11 +275,11 @@ freeSocketSet :: MonadIO m => SocketSet -> m ()
 freeSocketSet v1 = liftIO $ freeSocketSetFFI v1
 {-# INLINE freeSocketSet #-}
 
-
+{-
 addSocket :: MonadIO m => SocketSet -> GenericSocket -> m CInt
 addSocket v1 v2 = liftIO $ addSocketFFI v1 v2
 {-# INLINE addSocket #-}
-
+-}
 
 tcpAddSocket :: MonadIO m => SocketSet -> TCPSocket -> m CInt
 tcpAddSocket v1 v2 = liftIO $ tcpAddSocketFFI v1 v2
@@ -324,11 +290,11 @@ udpAddSocket :: MonadIO m => SocketSet -> UDPSocket -> m CInt
 udpAddSocket v1 v2 = liftIO $ udpAddSocketFFI v1 v2
 {-# INLINE udpAddSocket #-}
 
-
+{-
 delSocket :: MonadIO m => SocketSet -> GenericSet -> m CInt
 delSocket v1 v2 = liftIO $ delSocketFFI v1 v2
 {-# INLINE delSocket #-}
-
+-}
 
 tcpDelSocket :: MonadIO m => SocketSet -> TCPSocket -> m CInt
 tcpDelSocket v1 v2 = liftIO $ tcpDelSocketFFI v1 v2
@@ -344,7 +310,38 @@ checkSockets :: MonadIO m => SocketSet -> Word32 -> m CInt
 checkSockets v1 v2 = liftIO $ checkSocketsFFI v1 v2
 {-# INLINE checkSockets #-}
 
-
+{-
 socketReady :: MonadIO m => GenericSocket -> m CInt
 socketReady v1 = liftIO $ socketReadyFFI v1
 {-# INLINE socketReady #-}
+-}
+
+-- | 1
+-- SDL_net library major number at compilation time
+pattern SDL_NET_MAJOR_VERSION = (#const SDL_NET_MAJOR_VERSION)
+-- | 2
+-- SDL_net library minor number at compilation time
+pattern SDL_NET_MINOR_VERSION = (#const SDL_NET_MINOR_VERSION)
+-- | 7
+-- SDL_net library patch level at compilation time
+pattern SDL_NET_PATCHLEVEL = (#const SDL_NET_PATCHLEVEL)
+
+-- | 0x00000000 (0.0.0.0)
+-- used for listening on all network interfaces
+pattern INADDR_ANY = (#const INADDR_ANY)
+
+-- | 0xFFFFFFFF (255.255.255.255)
+-- which has limited applications
+pattern INADDR_NONE = (#const INADDR_NONE)
+
+-- | 0xFFFFFFFF (255.255.255.255)
+-- used as destination when sending a message to all clients on a subnet that allows broadcasts
+pattern INADDR_BROADCAST = (#const INADDR_BROADCAST)
+
+-- | 32
+-- The maximum number of channels on a UDP socket
+pattern SDLNET_MAX_UDPCHANNELS = (#const SDLNET_MAX_UDPCHANNELS)
+
+-- | 4
+-- The maximum number of addresses bound to a single UDP socket channel
+pattern SDLNET_MAX_UDPADDRESSES = (#const SDLNET_MAX_UDPADDRESSES)
